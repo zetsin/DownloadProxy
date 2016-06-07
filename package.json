@@ -1,0 +1,9 @@
+{
+  "name": "DownloadProxy",
+  "version": "0.2.0",
+  "main": "main.js",
+  "dependencies": {
+    "body-parser": "^1.15.1",
+    "express": "^4.13.4"
+  }
+}

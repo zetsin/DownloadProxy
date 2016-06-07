@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Zetsin</title>
+
+		<!-- Stylesheets -->
+		<link rel="stylesheet" type="text/css" href="/lib/photon/css/photon.min.css">
+
+	</head>
+
+	<body>
+		<!-- Wrap your entire app inside .window -->
+		<div class="window">
+			<header class="toolbar toolbar-header">
+				<div class="toolbar-actions">
+					<div style="display: flex;">
+						<input id="url" class="form-control" type="text" placeholder="这儿输入要下载的网址" style="flex: 1;" title="回车开始下载">
+						<button id="download" class="btn btn-default pull-right" title="开始下载">
+							<span class="icon icon-download"></span>
+						</button>
+						<select id="name" class="form-control" style="width: initial;" title="以...命名">
+							<option value="url">网址</option>
+							<option value="name">文件名</option>
+							<option value="random">随机字符</option>
+						</select>
+					</form>
+				</div>
+			</header>
+
+			<!-- Your app's content goes inside .window-content -->
+			<div class="window-content">
+				<div class="pane-group">
+					<div class="pane">
+						<table id="files" class="table-striped"></table>
+					</div>
+					<div class="pane pane-sm sidebar">
+						<div class="toolbar-actions">
+							<h1 class="title">正在下载...</h1>
+						</div>
+						<div id="downloading"></div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<script type="text/javascript" src="/lib/jquery.js"></script>
+		<script type="text/javascript">
+			$(() => {
+				getDownload()
+				setInterval(getDownload, 1000)
+
+				$('#download').on('click', () => {
+					download()
+				})
+				$('#url').on('keydown', (e) => {
+					if(e.keyCode == 13) {
+						download()
+					}
+				})
+
+				function download() {
+					open(`/${encodeURIComponent($('#url').val())}?name=${$('#name').val()}`)
+				}
+
+				function getDownload() {
+					$.get('/download', (result) => {
+						result.downloaded.sort((a, b) => {
+							return b.birthtime - a.birthtime
+						})
+						let $tr = ''
+						result.downloaded.forEach((item) => {
+							$tr += `
+								<tr>
+									<td><a href="/download/${encodeURIComponent(item.file)}" target="_blank">${decodeURIComponent(item.file)}</a></td>
+									<td>${bytesToSize(item.size)}</td>
+									<td>${new Date(item.birthtime)}</td>
+								</tr>
+							`
+						})
+						$('#files').html(`
+							<thead>
+								<tr>
+									<th>名字</th>
+									<th>大小</th>
+									<th>创建时间</th>
+								</tr>
+							</thead>
+							<tbody>${$tr}</tbody>
+						`)
+
+						let $li = ''
+						result.downloading.forEach((item) => {
+							$li += `<li class="list-group-item" title="${item.file}">
+								<strong>${item.file}</strong>
+								<p>${bytesToSize(item.current/(Date.now() - item._t) * 1000)}/s - ${bytesToSize(item.current)} of ${bytesToSize(item.total)}</p>
+							</li>`
+						})
+						$('#downloading').html(`
+							<ul class="list-group">${$li}</ul>
+						`)
+					})
+				}
+
+				function bytesToSize(bytes) {
+					if (bytes === 0) return '0 B'
+					let k = 1024
+					let sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+					let i = Math.floor(Math.log(bytes) / Math.log(k))
+					return (bytes / Math.pow(k, i)).toPrecision(3) + ' ' + sizes[i]
+				}
+ 			})
+		</script>
+	</body>
+</html>
