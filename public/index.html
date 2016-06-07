@@ -64,7 +64,7 @@
 				function getDownload() {
 					$.get('/download', (result) => {
 						result.downloaded.sort((a, b) => {
-							return b.birthtime - a.birthtime
+							return a.file == 'README.md' ? -1 : b.birthtime - a.birthtime
 						})
 						let $tr = ''
 						result.downloaded.forEach((item) => {

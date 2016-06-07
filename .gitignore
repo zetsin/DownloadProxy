@@ -38,6 +38,6 @@ jspm_packages
 
 
 /public/download/*
-!/public/download/README
+!/public/download/README.md
 /public/downloading/*
-!/public/downloading/YOUWILLNOTREADME
+!/public/downloading/YOUWILLNOTREADME.md
