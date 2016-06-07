@@ -63,7 +63,6 @@
 
 				function getDownload() {
 					$.get('/download', (result) => {
-						console.log(result.downloaded.length)
 						result.downloaded.sort((a, b) => {
 							if(a.file == 'README.md'){
 								return -1

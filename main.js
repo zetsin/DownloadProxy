@@ -91,8 +91,8 @@ app.get('/:url', (req, res, next) => {
 				fs.rename(downloadingName, downloadName, () => {})
 			})
 
-		}).on('error', (e) => {
-			console.log(e)
+		}).on('error', (err) => {
+			console.log(err)
 			if(location) {
 				return
 			}
@@ -110,6 +110,7 @@ watchDownloaded()
 function watchDownloaded() {
 	fs.readdir(global.downloadedPath, (err, files) => {
 		if(err) {
+			console.log(err)
 			return
 		}
 
