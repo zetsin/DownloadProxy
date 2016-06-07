@@ -63,15 +63,21 @@
 
 				function getDownload() {
 					$.get('/download', (result) => {
+						console.log(result.downloaded.length)
 						result.downloaded.sort((a, b) => {
-							return a.file == 'README.md' ? -1 : b.birthtime - a.birthtime
+							if(a.file == 'README.md'){
+								return -1
+							} else if(b.file == 'README.md') {
+								return 1
+							}
+							return b.birthtime - a.birthtime
 						})
 						let $tr = ''
 						result.downloaded.forEach((item) => {
 							$tr += `
 								<tr>
 									<td><a href="/download/${encodeURIComponent(item.file)}" target="_blank">${decodeURIComponent(item.file)}</a></td>
-									<td>${bytesToSize(item.size)}</td>
+									<td>${prettyBytes(item.size)}</td>
 									<td>${new Date(item.birthtime)}</td>
 								</tr>
 							`
@@ -91,7 +97,7 @@
 						result.downloading.forEach((item) => {
 							$li += `<li class="list-group-item" title="${item.file}">
 								<strong>${item.file}</strong>
-								<p>${bytesToSize(item.current/(Date.now() - item._t) * 1000)}/s - ${bytesToSize(item.current)} of ${bytesToSize(item.total)}</p>
+								<p>${prettyBytes(item.current/(Date.now() - item._t) * 1000)}/s - ${prettyBytes(item.current)} of ${prettyBytes(item.total)}</p>
 							</li>`
 						})
 						$('#downloading').html(`
@@ -100,12 +106,27 @@
 					})
 				}
 
-				function bytesToSize(bytes) {
-					if (bytes === 0) return '0 B'
-					let k = 1024
-					let sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
-					let i = Math.floor(Math.log(bytes) / Math.log(k))
-					return (bytes / Math.pow(k, i)).toPrecision(3) + ' ' + sizes[i]
+				function prettyBytes(num) {
+					num = parseFloat(num)
+
+					var exponent;
+					var unit;
+					var neg = num < 0;
+					var units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+
+					if (neg) {
+						num = -num;
+					}
+
+					if (num < 1) {
+						return (neg ? '-' : '') + num + ' B';
+					}
+
+					exponent = Math.min(Math.floor(Math.log(num) / Math.log(1000)), units.length - 1);
+					num = Number((num / Math.pow(1000, exponent)).toFixed(2));
+					unit = units[exponent];
+
+					return (neg ? '-' : '') + num + ' ' + unit;
 				}
  			})
 		</script>

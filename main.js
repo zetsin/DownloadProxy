@@ -9,9 +9,12 @@ const express = require('express')
 const bodyParser = require('body-parser')
 
 const global = {
-	downloadUrl: __dirname + '/public/download/',
-	downloadingUrl: __dirname + '/public/downloading/',
-	downloadingObj: {}
+	downloadedPath: __dirname + '/public/download/',
+	downloadingPath: __dirname + '/public/downloading/',
+	downloadObj: {
+		downloaded: {},
+		downloading: {}
+	}
 }
 
 const app = express()
@@ -20,49 +23,19 @@ app.use(express.static('public', {
 }))
 
 app.get('/download', (req, res, next) => {
-	fs.readdir(global.downloadUrl, (err, files) => {
-		if(err) {
-			res.status(404).end()
-			return
-		}
-		let result = {
-			downloaded: [],
-			downloading: [],
-		}
+	let result = {
+		downloaded: [],
+		downloading: [],
+	}
 
-		for(let key in global.downloadingObj) {
-			result.downloading.push(global.downloadingObj[key])
-		}
+	for(let key in global.downloadObj.downloaded) {
+		result.downloaded.push(global.downloadObj.downloaded[key])
+	}
 
-		if(!files.length) {
-			res.json(result)
-			return
-		}
-
-		let erred = false
-		files.forEach((file, index) => {
-			fs.stat(global.downloadUrl + file, (err, stat) => {
-				if(erred || err) {
-					erred = true
-					res.status(404).end()
-					return
-				}
-				let item = {
-					file: file,
-					size: stat.size,
-					birthtime: Date.parse(stat.birthtime),
-					atime: Date.parse(stat.atime),
-					mtime: Date.parse(stat.mtime),
-					ctime: Date.parse(stat.ctime),
-				}
-				result.downloaded.push(item)
-
-				if(index == files.length - 1) {
-					res.json(result)
-				}
-			})
-		})
-	})
+	for(let key in global.downloadObj.downloading) {
+		result.downloading.push(global.downloadObj.downloading[key])
+	}
+	res.json(result)
 })
 
 app.get('/:url', (req, res, next) => {
@@ -77,7 +50,7 @@ app.get('/:url', (req, res, next) => {
 		let urlobj = url.parse(urlparam)
 
 		let guid = `${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}_`
-		global.downloadingObj[guid] = {
+		global.downloadObj.downloading[guid] = {
 			file: urlobj.href,
 			current: 0,
 			total: 0,
@@ -89,7 +62,7 @@ app.get('/:url', (req, res, next) => {
 		protocol.get(urlobj.href, (remote) => {
 			if(remote.headers.location) {
 				location = true
-				delete global.downloadingObj[guid]
+				delete global.downloadObj.downloading[guid]
 				get(remote.headers.location)
 				return
 			}
@@ -100,22 +73,21 @@ app.get('/:url', (req, res, next) => {
 				name = path.parse(urlobj.hostname + urlobj.pathname).base
 			} else if (req.query.name == 'random') {
 				name = Math.random().toString(35).slice(2, 66)
-				console.log(name)
 			}
 			name = encodeURIComponent(name)
-			let downloadingName = `${global.downloadingUrl}${guid}${name}`
-			let downloadName = `${global.downloadUrl}${guid}${name}`
-			global.downloadingObj[guid].total = remote.headers['content-length']
-			global.downloadingObj[guid]._t = Date.now()
+			let downloadingName = `${global.downloadingPath}${guid}${name}`
+			let downloadName = `${global.downloadedPath}${guid}${name}`
+			global.downloadObj.downloading[guid].total = remote.headers['content-length']
+			global.downloadObj.downloading[guid]._t = Date.now()
 
 			remote.on('data', (data) => {
 				res.write(data)
-				global.downloadingObj[guid].current += data.length
+				global.downloadObj.downloading[guid].current += data.length
 				fs.appendFile(downloadingName, data, (err) => {})
 			})
 			remote.on('end', () => {
 				res.end()
-				delete global.downloadingObj[guid]
+				delete global.downloadObj.downloading[guid]
 				fs.rename(downloadingName, downloadName, () => {})
 			})
 
@@ -125,10 +97,48 @@ app.get('/:url', (req, res, next) => {
 				return
 			}
 			res.status(404).end()
-			delete global.downloadingObj[guid]
+			delete global.downloadObj.downloading[guid]
 		})
 	}
 })
 
 
 app.listen(3000)
+
+watchDownloaded()
+
+function watchDownloaded() {
+	fs.readdir(global.downloadedPath, (err, files) => {
+		if(err) {
+			return
+		}
+
+		let count = 0
+		let time = Date.now()
+		files.forEach((file, index) => {
+			fs.stat(global.downloadedPath + file, (err, stat) => {
+				if(!err) {
+					global.downloadObj.downloaded[file] = {
+						file: file,
+						size: stat.size,
+						birthtime: Date.parse(stat.birthtime),
+						atime: Date.parse(stat.atime),
+						mtime: Date.parse(stat.mtime),
+						ctime: Date.parse(stat.ctime),
+						time: time
+					}
+				}
+
+				count += 1
+				if(count == files.length) {
+					for(let key in global.downloadObj.downloaded) {
+						if(global.downloadObj.downloaded[key].time != time) {
+							delete global.downloadObj.downloaded[key]
+						}
+					}
+					setTimeout(watchDownloaded, 500)
+				}
+			})
+		})
+	})
+}
