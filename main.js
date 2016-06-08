@@ -9,8 +9,9 @@ const express = require('express')
 const bodyParser = require('body-parser')
 
 const global = {
-	downloadedPath: __dirname + '/public/download/',
-	downloadingPath: __dirname + '/public/downloading/',
+	downloadedPath: `${__dirname}/public/download/`,
+	downloadingPath: `${__dirname}/public/downloading/`,
+	downloadedJsonPath: `${__dirname}/public/downloaded.json`,
 	downloadObj: {
 		downloaded: {},
 		downloading: {}
@@ -18,9 +19,14 @@ const global = {
 }
 
 const app = express()
-app.use(express.static('public', {
-	dotfiles: 'allow'
-}))
+
+
+app.get('/download/:file', (req, res, next) => {
+	downloadedIncrease(req.params.file)
+	next()
+})
+
+app.use(express.static('public'))
 
 app.get('/download', (req, res, next) => {
 	let result = {
@@ -49,12 +55,13 @@ app.get('/:url', (req, res, next) => {
 
 		let urlobj = url.parse(urlparam)
 
-		let guid = `${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}_`
+		let now = Date.now()
+		let guid = `${Math.random().toString(36).slice(2)}`
 		global.downloadObj.downloading[guid] = {
 			file: urlobj.href,
 			current: 0,
 			total: 0,
-			_t: 0 
+			begintime: now
 		}
 
 		let location = false
@@ -69,16 +76,15 @@ app.get('/:url', (req, res, next) => {
 			res.set(remote.headers)
 
 			let name = urlobj.href
-			if(req.query.name == 'name') {
+			if(req.query.name == 'filename') {
 				name = path.parse(urlobj.hostname + urlobj.pathname).base
 			} else if (req.query.name == 'random') {
 				name = Math.random().toString(35).slice(2, 66)
 			}
-			name = encodeURIComponent(name)
-			let downloadingName = `${global.downloadingPath}${guid}${name}`
-			let downloadName = `${global.downloadedPath}${guid}${name}`
+			name = `${guid}_${encodeURIComponent(name)}`
+			let downloadingName = `${global.downloadingPath}${name}`
+			let downloadName = `${global.downloadedPath}${name}`
 			global.downloadObj.downloading[guid].total = remote.headers['content-length']
-			global.downloadObj.downloading[guid]._t = Date.now()
 
 			remote.on('data', (data) => {
 				res.write(data)
@@ -88,7 +94,12 @@ app.get('/:url', (req, res, next) => {
 			remote.on('end', () => {
 				res.end()
 				delete global.downloadObj.downloading[guid]
-				fs.rename(downloadingName, downloadName, () => {})
+				fs.rename(downloadingName, downloadName, (err) => {
+					if(err) {
+						return
+					}
+					downloadedUpdate(name, now)
+				})
 			})
 
 		}).on('error', (err) => {
@@ -105,9 +116,34 @@ app.get('/:url', (req, res, next) => {
 
 app.listen(3000)
 
-watchDownloaded()
+downloadedLoad()
 
-function watchDownloaded() {
+function downloadedUpdate(filename, begintime) {
+	global.downloadObj.downloaded[filename] = {
+	}
+	stat(filename, (fileObj) => {
+		fileObj.begintime = begintime || 0,
+		fileObj.endtime = Date.now()
+
+		fs.writeFile(global.downloadedJsonPath, JSON.stringify(global.downloadObj.downloaded, null, 2))
+	})
+
+}
+
+function downloadedIncrease(filename) {
+	if(!global.downloadObj.downloaded[filename]) {
+		return
+	}
+	global.downloadObj.downloaded[filename].count = global.downloadObj.downloaded[filename].count || 0
+	global.downloadObj.downloaded[filename].count += 1
+
+	fs.writeFile(global.downloadedJsonPath, JSON.stringify(global.downloadObj.downloaded, null, 2))
+
+}
+
+function downloadedLoad() {
+	global.downloadObj.downloaded = require(global.downloadedJsonPath)
+
 	fs.readdir(global.downloadedPath, (err, files) => {
 		if(err) {
 			console.log(err)
@@ -116,30 +152,38 @@ function watchDownloaded() {
 
 		let count = 0
 		let time = Date.now()
-		files.forEach((file, index) => {
-			fs.stat(global.downloadedPath + file, (err, stat) => {
-				if(!err) {
-					global.downloadObj.downloaded[file] = {
-						file: file,
-						size: stat.size,
-						birthtime: Date.parse(stat.birthtime),
-						atime: Date.parse(stat.atime),
-						mtime: Date.parse(stat.mtime),
-						ctime: Date.parse(stat.ctime),
-						time: time
-					}
-				}
-
+		files.forEach((filename, index) => {
+			stat(filename, (fileObj) => {
+				fileObj.time = time
 				count += 1
 				if(count == files.length) {
 					for(let key in global.downloadObj.downloaded) {
 						if(global.downloadObj.downloaded[key].time != time) {
-							delete global.downloadObj.downloaded[key]
+							global.downloadObj.downloaded[key].delete = true
 						}
 					}
-					setTimeout(watchDownloaded, 500)
+					fs.writeFile(global.downloadedJsonPath, JSON.stringify(global.downloadObj.downloaded, null, 2))
 				}
 			})
 		})
+	})
+}
+
+function stat(filename, cb) {
+	fs.stat(global.downloadedPath + filename, (err, stat) => {
+		global.downloadObj.downloaded[filename] = global.downloadObj.downloaded[filename] || {}
+		let fileObj = global.downloadObj.downloaded[filename]
+		if(!err) {
+			fileObj.filename = filename,
+			fileObj.size = stat.size,
+			fileObj.birthtime = Date.parse(stat.birthtime),
+			fileObj.atime = Date.parse(stat.atime),
+			fileObj.mtime = Date.parse(stat.mtime),
+			fileObj.ctime = Date.parse(stat.ctime),
+			fileObj.begintime = fileObj.begintime || 0,
+			fileObj.endtime = fileObj.endtime || 0,
+			fileObj.count = fileObj.count || 0
+		}
+		cb(fileObj)
 	})
 }
